@@ -1,22 +1,62 @@
 import operator
+from collections.abc import (
+    Callable,
+    Iterable,
+    Mapping,
+    MutableMapping,
+    Sequence,
+)
 from functools import reduce
-from collections.abc import Mapping
+from typing import Any, Protocol, TypeVar, overload
 
-__all__ = ('merge', 'merge_with', 'valmap', 'keymap', 'itemmap',
-           'valfilter', 'keyfilter', 'itemfilter',
-           'assoc', 'dissoc', 'assoc_in', 'update_in', 'get_in')
+__all__ = (
+    'merge',
+    'merge_with',
+    'valmap',
+    'keymap',
+    'itemmap',
+    'valfilter',
+    'keyfilter',
+    'itemfilter',
+    'assoc',
+    'dissoc',
+    'assoc_in',
+    'update_in',
+    'get_in',
+)
+
+_Map = MutableMapping[Any, Any]
+_MT = TypeVar('_MT', bound=_Map)
+_MT_co = TypeVar('_MT_co', bound=_Map, covariant=True)
 
 
-def _get_factory(f, kwargs):
-    factory = kwargs.pop('factory', dict)
+class _Factory(Protocol[_MT_co]):
+    def __call__(self) -> _MT_co:
+        pass
+
+
+def _get_factory(f: Callable[..., Any], kwargs: _Map) -> _Factory[_Map]:
+    factory: _Factory[_Map] = kwargs.pop('factory', dict)
     if kwargs:
-        raise TypeError("{}() got an unexpected keyword argument "
-                        "'{}'".format(f.__name__, kwargs.popitem()[0]))
+        raise TypeError(
+            "{}() got an unexpected keyword argument "
+            "'{}'".format(f.__name__, kwargs.popitem()[0])
+        )
     return factory
 
 
-def merge(*dicts, **kwargs):
-    """ Merge a collection of dictionaries
+@overload
+def merge(__dicts: Sequence[_Map], /, *, factory: _Factory[_MT] = dict) -> _MT:
+    ...
+
+
+@overload
+def merge(*dicts: _Map, factory: _Factory[_MT] = dict) -> _MT:
+    ...
+
+
+def merge(*dicts: Any, **kwargs: _Factory[_MT]) -> _Map:
+    """Merge a collection of dictionaries
 
     >>> merge({1: 'one'}, {2: 'two'})
     {1: 'one', 2: 'two'}
@@ -39,8 +79,32 @@ def merge(*dicts, **kwargs):
     return rv
 
 
-def merge_with(func, *dicts, **kwargs):
-    """ Merge dictionaries and apply function to combined values
+class _MergeWithCallback(Protocol):
+    def __call__(self, __it: Iterable[Any], /) -> Any:
+        pass
+
+
+@overload
+def merge_with(
+    func: _MergeWithCallback,
+    __dicts: Sequence[_Map],
+    *,
+    factory: _Factory[_MT] = dict
+) -> _MT:
+    ...
+
+
+@overload
+def merge_with(
+    func: _MergeWithCallback, *dicts: _Map, factory: _Factory[_MT] = dict
+) -> _MT:
+    ...
+
+
+def merge_with(
+    func: _MergeWithCallback, *dicts: Any, **kwargs: _Factory[_MT]
+) -> _Map:
+    """Merge dictionaries and apply function to combined values
 
     A key may occur in more than one dict, and all values mapped from the key
     will be passed to the function as a list, such as func([val1, val2, ...]).
@@ -68,8 +132,10 @@ def merge_with(func, *dicts, **kwargs):
     return valmap(func, result, factory)
 
 
-def valmap(func, d, factory=dict):
-    """ Apply function to values of dictionary
+def valmap(
+    func: Callable[[Any], Any], d: _Map, factory: _Factory[_MT] = dict
+) -> _MT:
+    """Apply function to values of dictionary
 
     >>> bills = {"Alice": [20, 15, 30], "Bob": [10, 35]}
     >>> valmap(sum, bills)  # doctest: +SKIP
@@ -84,8 +150,10 @@ def valmap(func, d, factory=dict):
     return rv
 
 
-def keymap(func, d, factory=dict):
-    """ Apply function to keys of dictionary
+def keymap(
+    func: Callable[[Any], Any], d: _Map, factory: _Factory[_MT] = dict
+) -> _MT:
+    """Apply function to keys of dictionary
 
     >>> bills = {"Alice": [20, 15, 30], "Bob": [10, 35]}
     >>> keymap(str.lower, bills)  # doctest: +SKIP
@@ -100,8 +168,12 @@ def keymap(func, d, factory=dict):
     return rv
 
 
-def itemmap(func, d, factory=dict):
-    """ Apply function to items of dictionary
+def itemmap(
+    func: Callable[[tuple[Any, Any]], Any],
+    d: _Map,
+    factory: _Factory[_MT] = dict,
+) -> _MT:
+    """Apply function to items of dictionary
 
     >>> accountids = {"Alice": 10, "Bob": 20}
     >>> itemmap(reversed, accountids)  # doctest: +SKIP
@@ -116,8 +188,10 @@ def itemmap(func, d, factory=dict):
     return rv
 
 
-def valfilter(predicate, d, factory=dict):
-    """ Filter items in dictionary by value
+def valfilter(
+    predicate: Callable[[Any], bool], d: _Map, factory: _Factory[_MT] = dict
+) -> _MT:
+    """Filter items in dictionary by value
 
     >>> iseven = lambda x: x % 2 == 0
     >>> d = {1: 2, 2: 3, 3: 4, 4: 5}
@@ -136,8 +210,10 @@ def valfilter(predicate, d, factory=dict):
     return rv
 
 
-def keyfilter(predicate, d, factory=dict):
-    """ Filter items in dictionary by key
+def keyfilter(
+    predicate: Callable[[Any], bool], d: _Map, factory: _Factory[_MT] = dict
+) -> _MT:
+    """Filter items in dictionary by key
 
     >>> iseven = lambda x: x % 2 == 0
     >>> d = {1: 2, 2: 3, 3: 4, 4: 5}
@@ -156,8 +232,12 @@ def keyfilter(predicate, d, factory=dict):
     return rv
 
 
-def itemfilter(predicate, d, factory=dict):
-    """ Filter items in dictionary by item
+def itemfilter(
+    predicate: Callable[[tuple[Any, Any]], Any],
+    d: _Map,
+    factory: _Factory[_MT] = dict,
+) -> _MT:
+    """Filter items in dictionary by item
 
     >>> def isvalid(item):
     ...     k, v = item
@@ -180,8 +260,8 @@ def itemfilter(predicate, d, factory=dict):
     return rv
 
 
-def assoc(d, key, value, factory=dict):
-    """ Return a new dict with new key value pair
+def assoc(d: _Map, key: Any, value: Any, factory: _Factory[_MT] = dict) -> _MT:
+    """Return a new dict with new key value pair
 
     New dict has d[key] set to value. Does not modify the initial dictionary.
 
@@ -196,8 +276,8 @@ def assoc(d, key, value, factory=dict):
     return d2
 
 
-def dissoc(d, *keys, **kwargs):
-    """ Return a new dict with the given key(s) removed.
+def dissoc(d: _Map, *keys: Any, **kwargs: _Map) -> _Map:
+    """Return a new dict with the given key(s) removed.
 
     New dict has d[key] deleted for each supplied key.
     Does not modify the initial dictionary.
@@ -212,7 +292,7 @@ def dissoc(d, *keys, **kwargs):
     factory = _get_factory(dissoc, kwargs)
     d2 = factory()
 
-    if len(keys) < len(d) * .6:
+    if len(keys) < len(d) * 0.6:
         d2.update(d)
         for key in keys:
             if key in d2:
@@ -225,8 +305,10 @@ def dissoc(d, *keys, **kwargs):
     return d2
 
 
-def assoc_in(d, keys, value, factory=dict):
-    """ Return a new dict with new, potentially nested, key value pair
+def assoc_in(
+    d: _Map, keys: Iterable[Any], value: Any, factory: _Factory[_MT] = dict
+) -> _MT:
+    """Return a new dict with new, potentially nested, key value pair
 
     >>> purchase = {'name': 'Alice',
     ...             'order': {'items': ['Apple', 'Orange'],
@@ -240,8 +322,14 @@ def assoc_in(d, keys, value, factory=dict):
     return update_in(d, keys, lambda x: value, value, factory)
 
 
-def update_in(d, keys, func, default=None, factory=dict):
-    """ Update value in a (potentially) nested dictionary
+def update_in(
+    d: _Map,
+    keys: Iterable[Any],
+    func: Callable[[Any], Any],
+    default: Any = None,
+    factory: _Factory[_MT] = dict,
+) -> _MT:
+    """Update value in a (potentially) nested dictionary
 
     inputs:
     d - dictionary on which to operate
@@ -298,8 +386,13 @@ def update_in(d, keys, func, default=None, factory=dict):
     return rv
 
 
-def get_in(keys, coll, default=None, no_default=False):
-    """ Returns coll[i0][i1]...[iX] where [i0, i1, ..., iX]==keys.
+def get_in(
+    keys: Sequence[Any],
+    coll: _Map,
+    default: Any = None,
+    no_default: bool = False,
+) -> Any:
+    """Returns coll[i0][i1]...[iX] where [i0, i1, ..., iX]==keys.
 
     If coll[i0][i1]...[iX] cannot be found, returns ``default``, unless
     ``no_default`` is specified, then it raises KeyError or IndexError.
