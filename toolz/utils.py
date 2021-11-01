@@ -1,4 +1,7 @@
-def raises(err, lamda):
+from typing import Any, Callable, Type
+
+
+def raises(err: Type[BaseException], lamda: Callable[[], Any]) -> bool:
     try:
         lamda()
         return False
